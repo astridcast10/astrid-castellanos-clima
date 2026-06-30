@@ -1,154 +1,58 @@
 import streamlit as st
 import requests
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 
-st.set_page_config(
-    page_title="ClimaCast",
-    page_icon="🌤️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@500;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    .main { background-color: #0f172a; }
-
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-
-    .app-header {
-        text-align: center;
-        padding: 2rem 0 1.5rem;
-        border-bottom: 1px solid #1e293b;
-        margin-bottom: 2rem;
-    }
-    .app-header h1 {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 2.8rem;
-        font-weight: 700;
-        color: #f8fafc;
-        letter-spacing: -0.5px;
-        margin: 0;
-    }
-    .app-header p {
-        color: #64748b;
-        font-size: 1rem;
-        margin-top: 0.4rem;
-    }
-
-    .metric-card {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border: 1px solid #334155;
-        border-radius: 16px;
-        padding: 1.4rem 1.2rem;
-        text-align: center;
-        transition: border-color 0.2s;
-    }
-    .metric-card:hover { border-color: #38bdf8; }
-    .metric-label {
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 0.5rem;
-    }
-    .metric-value {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #f1f5f9;
-        line-height: 1;
-    }
-    .metric-unit {
-        font-size: 1rem;
-        color: #38bdf8;
-        font-weight: 500;
-    }
-    .metric-icon { font-size: 1.8rem; margin-bottom: 0.4rem; }
-
-    .condition-chip {
-        display: inline-block;
-        background: #0ea5e9;
-        color: #fff;
-        font-size: 0.85rem;
-        font-weight: 600;
-        padding: 0.3rem 1rem;
-        border-radius: 999px;
-        margin-top: 0.5rem;
-    }
-
-    .section-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #cbd5e1;
-        margin: 1.8rem 0 0.8rem;
-        padding-bottom: 0.4rem;
-        border-bottom: 1px solid #1e293b;
-    }
-
-    [data-testid="stSidebar"] {
-        background-color: #0f172a;
-        border-right: 1px solid #1e293b;
-    }
-    [data-testid="stSidebar"] label { color: #94a3b8 !important; }
-
-    #MainMenu, footer, header { visibility: hidden; }
-</style>
-""", unsafe_allow_html=True)
-
+st.set_page_config(page_title="Clima HN", layout="wide", initial_sidebar_state="expanded")
 
 CIUDADES = {
-    "Tegucigalpa, Honduras":   (14.0818, -87.2068),
-    "San Pedro Sula, Honduras":(15.5000, -88.0333),
-    "Villanueva, Honduras":    (15.3167, -87.9500),
-    "Ciudad de México, México":(19.4326, -99.1332),
-    "Bogotá, Colombia":        (4.7110,  -74.0721),
-    "Buenos Aires, Argentina": (-34.6037,-58.3816),
-    "Lima, Perú":              (-12.0464,-77.0428),
-    "Madrid, España":          (40.4168, -3.7038),
-    "Nueva York, EE.UU.":      (40.7128, -74.0060),
-    "Tokyo, Japón":            (35.6762, 139.6503),
+    "Tegucigalpa":      (14.0818, -87.2068),
+    "San Pedro Sula":   (15.5000, -88.0333),
+    "Villanueva":       (15.3167, -87.9500),
+    "La Ceiba":         (15.7794, -86.7936),
+    "Choloma":          (15.6167, -87.9500),
+    "El Progreso":      (15.4000, -87.8000),
+    "Choluteca":        (13.3000, -87.2000),
+    "Comayagua":        (14.4500, -87.6333),
+    "Siguatepeque":     (14.5979, -87.8325),
+    "Santa Rosa de Copan": (14.7667, -88.7833),
+    "Danli":            (14.0333, -86.5833),
+    "Juticalpa":        (14.6667, -86.2167),
+    "Tela":             (15.7833, -87.4500),
+    "Trujillo":         (15.9167, -85.9667),
+    "Puerto Cortes":    (15.8500, -87.9333),
 }
 
 WMO_CODES = {
-    0: ("Despejado ☀️", "☀️"),
-    1: ("Mayormente despejado 🌤️", "🌤️"),
-    2: ("Parcialmente nublado ⛅", "⛅"),
-    3: ("Nublado ☁️", "☁️"),
-    45: ("Niebla 🌫️", "🌫️"),
-    48: ("Niebla con escarcha 🌫️", "🌫️"),
-    51: ("Llovizna ligera 🌦️", "🌦️"),
-    53: ("Llovizna moderada 🌦️", "🌦️"),
-    55: ("Llovizna intensa 🌧️", "🌧️"),
-    61: ("Lluvia ligera 🌧️", "🌧️"),
-    63: ("Lluvia moderada 🌧️", "🌧️"),
-    65: ("Lluvia fuerte 🌧️", "🌧️"),
-    71: ("Nieve ligera ❄️", "❄️"),
-    73: ("Nieve moderada ❄️", "❄️"),
-    75: ("Nieve fuerte ❄️", "❄️"),
-    80: ("Chubascos ligeros 🌦️", "🌦️"),
-    81: ("Chubascos moderados 🌧️", "🌧️"),
-    82: ("Chubascos fuertes ⛈️", "⛈️"),
-    95: ("Tormenta eléctrica ⛈️", "⛈️"),
-    99: ("Tormenta con granizo ⛈️", "⛈️"),
+    0: "Cielo despejado",
+    1: "Mayormente despejado",
+    2: "Parcialmente nublado",
+    3: "Nublado",
+    45: "Niebla",
+    48: "Niebla con escarcha",
+    51: "Llovizna ligera",
+    53: "Llovizna moderada",
+    55: "Llovizna intensa",
+    61: "Lluvia ligera",
+    63: "Lluvia moderada",
+    65: "Lluvia fuerte",
+    71: "Nieve ligera",
+    73: "Nieve moderada",
+    75: "Nieve fuerte",
+    80: "Chubascos ligeros",
+    81: "Chubascos moderados",
+    82: "Chubascos fuertes",
+    95: "Tormenta electrica",
+    99: "Tormenta con granizo",
 }
 
+def wind_direction_label(deg):
+    dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
+    return dirs[round(deg / 45) % 8]
 
 @st.cache_data(ttl=600)
-def get_weather(lat: float, lon: float) -> dict | None:
+def get_weather(lat, lon):
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
         "latitude": lat,
@@ -156,13 +60,10 @@ def get_weather(lat: float, lon: float) -> dict | None:
         "current": [
             "temperature_2m", "relative_humidity_2m", "apparent_temperature",
             "weather_code", "wind_speed_10m", "wind_direction_10m",
-            "precipitation", "surface_pressure", "visibility",
+            "precipitation", "surface_pressure",
         ],
-        "hourly": ["temperature_2m", "precipitation_probability", "wind_speed_10m"],
-        "daily": [
-            "temperature_2m_max", "temperature_2m_min",
-            "precipitation_sum", "weather_code",
-        ],
+        "hourly": ["temperature_2m", "precipitation_probability"],
+        "daily": ["temperature_2m_max", "temperature_2m_min", "precipitation_sum", "weather_code"],
         "timezone": "auto",
         "forecast_days": 7,
     }
@@ -174,207 +75,235 @@ def get_weather(lat: float, lon: float) -> dict | None:
         st.error(f"Error al conectar con la API: {e}")
         return None
 
-
-def wind_direction_label(deg: float) -> str:
-    dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
-    return dirs[round(deg / 45) % 8]
-
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "Inicio"
+if "historial" not in st.session_state:
+    st.session_state.historial = []
+if "ciudad_activa" not in st.session_state:
+    st.session_state.ciudad_activa = "Tegucigalpa"
 
 with st.sidebar:
-    st.markdown("### 🌍 Seleccionar ciudad")
-    ciudad = st.selectbox("Ciudad", list(CIUDADES.keys()), index=1)
+    st.title("Clima HN")
+    st.write("Honduras")
+    st.divider()
 
-    st.markdown("---")
-    ("""
-    Actualización cada **10 min**
-    """)
-    st.markdown("---")
-    if st.button("🔄 Actualizar datos", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+    if st.button("Inicio", use_container_width=True):
+        st.session_state.pagina = "Inicio"
+    if st.button("Consultar clima", use_container_width=True):
+        st.session_state.pagina = "Consultar"
+    if st.button("Historial", use_container_width=True):
+        st.session_state.pagina = "Historial"
+    if st.button("Acerca de", use_container_width=True):
+        st.session_state.pagina = "Acerca"
 
+    st.divider()
+    st.caption("Datos: Open-Meteo API")
 
-st.markdown("""
-<div class="app-header">
-    <h1>🌤️ ClimaScope</h1>
-    <p>Pronóstico meteorológico en tiempo real · Open-Meteo API</p>
-</div>
-""", unsafe_allow_html=True)
+pagina = st.session_state.pagina
 
-# Obtener datos
-lat, lon = CIUDADES[ciudad]
-data = get_weather(lat, lon)
+if pagina == "Inicio":
+    st.title("Clima en Honduras")
+    st.write("Consulta el clima actual y el pronostico de los proximos 7 dias para las principales ciudades de Honduras.")
+    st.divider()
 
-if not data:
-    st.stop()
+    col_info, col_consulta = st.columns([1.2, 1])
 
-cur = data["current"]
-daily = data["daily"]
-hourly = data["hourly"]
+    with col_info:
+        st.subheader("Resumen rapido — Tegucigalpa")
+        data = get_weather(*CIUDADES["Tegucigalpa"])
+        if data:
+            cur = data["current"]
+            condicion = WMO_CODES.get(cur["weather_code"], "Desconocido")
+            st.write(f"**Condicion:** {condicion}")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Temperatura", f"{cur['temperature_2m']:.1f} °C")
+            m2.metric("Humedad", f"{cur['relative_humidity_2m']} %")
+            m3.metric("Viento", f"{cur['wind_speed_10m']:.1f} km/h")
 
-wcode = cur.get("weather_code", 0)
-cond_label, cond_icon = WMO_CODES.get(wcode, ("Desconocido", "🌡️"))
-temp = cur["temperature_2m"]
-feels = cur["apparent_temperature"]
-humidity = cur["relative_humidity_2m"]
-wind_spd = cur["wind_speed_10m"]
-wind_dir = wind_direction_label(cur["wind_direction_10m"])
-precip = cur["precipitation"]
-pressure = cur["surface_pressure"]
+    with col_consulta:
+        st.subheader("Consulta rapida")
+        ciudad_rapida = st.selectbox("Ciudad", list(CIUDADES.keys()), key="inicio_ciudad")
+        if st.button("Ver clima", use_container_width=True):
+            st.session_state.ciudad_activa = ciudad_rapida
+            if ciudad_rapida not in st.session_state.historial:
+                st.session_state.historial.append(ciudad_rapida)
+            st.session_state.pagina = "Consultar"
+            st.rerun()
 
-# ciudad actual
-st.markdown(f"### 📍 {ciudad}")
-st.markdown(f'<span class="condition-chip">{cond_label}</span>', unsafe_allow_html=True)
-st.caption(f"Actualizado: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+elif pagina == "Consultar":
+    col_principal, col_derecha = st.columns([2, 1])
 
-cols = st.columns(4)
-metrics = [
-    ("🌡️", "Temperatura", f"{temp:.1f}", "°C"),
-    ("🤔", "Sensación térmica", f"{feels:.1f}", "°C"),
-    ("💧", "Humedad", f"{humidity}", "%"),
-    ("💨", "Viento", f"{wind_spd:.1f}", f"km/h {wind_dir}"),
-]
-for col, (icon, label, val, unit) in zip(cols, metrics):
-    col.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-icon">{icon}</div>
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{val} <span class="metric-unit">{unit}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
+    with col_principal:
+        st.title("Consultar clima")
+        ciudad = st.selectbox("Seleccionar ciudad", list(CIUDADES.keys()),
+                              index=list(CIUDADES.keys()).index(st.session_state.ciudad_activa))
 
-st.markdown("")
-cols2 = st.columns(4)
-metrics2 = [
-    ("🌧️", "Precipitación", f"{precip:.1f}", "mm"),
-    ("🔵", "Presión", f"{pressure:.0f}", "hPa"),
-    ("📍", "Latitud", f"{lat:.4f}", "°"),
-    ("📍", "Longitud", f"{lon:.4f}", "°"),
-]
-for col, (icon, label, val, unit) in zip(cols2, metrics2):
-    col.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-icon">{icon}</div>
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{val} <span class="metric-unit">{unit}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
+        if ciudad != st.session_state.ciudad_activa:
+            st.session_state.ciudad_activa = ciudad
 
+        if ciudad not in st.session_state.historial:
+            st.session_state.historial.append(ciudad)
 
-# ── Pronóstico por hora (próximas 24h) ────────────────────────────────────────
-st.markdown('<div class="section-title">📈 Temperatura próximas 24 horas</div>', unsafe_allow_html=True)
+        lat, lon = CIUDADES[ciudad]
+        data = get_weather(lat, lon)
 
-horas = hourly["time"][:24]
-temps_h = hourly["temperature_2m"][:24]
-prob_lluvia = hourly["precipitation_probability"][:24]
-viento_h = hourly["wind_speed_10m"][:24]
+        if not data:
+            st.stop()
 
-df_hourly = pd.DataFrame({
-    "Hora": [h[11:16] for h in horas],
-    "Temperatura (°C)": temps_h,
-    "Prob. lluvia (%)": prob_lluvia,
-    "Viento (km/h)": viento_h,
-})
+        cur = data["current"]
+        daily = data["daily"]
+        hourly = data["hourly"]
 
-fig_temp = go.Figure()
-fig_temp.add_trace(go.Scatter(
-    x=df_hourly["Hora"],
-    y=df_hourly["Temperatura (°C)"],
-    mode="lines+markers",
-    line=dict(color="#38bdf8", width=2.5),
-    marker=dict(size=5, color="#0ea5e9"),
-    fill="tozeroy",
-    fillcolor="rgba(56,189,248,0.08)",
-    name="Temperatura",
-))
-fig_temp.update_layout(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#94a3b8", family="Inter"),
-    xaxis=dict(gridcolor="#1e293b", tickfont=dict(size=11)),
-    yaxis=dict(gridcolor="#1e293b", ticksuffix="°C"),
-    margin=dict(l=0, r=0, t=10, b=0),
-    height=260,
-    showlegend=False,
-)
-st.plotly_chart(fig_temp, use_container_width=True)
+        temp     = cur["temperature_2m"]
+        feels    = cur["apparent_temperature"]
+        humidity = cur["relative_humidity_2m"]
+        wind_spd = cur["wind_speed_10m"]
+        wind_dir = wind_direction_label(cur["wind_direction_10m"])
+        precip   = cur["precipitation"]
+        pressure = cur["surface_pressure"]
+        condicion = WMO_CODES.get(cur["weather_code"], "Desconocido")
 
-# Probabilidad de lluvia
-st.markdown('<div class="section-title">🌧️ Probabilidad de lluvia (próximas 24h)</div>', unsafe_allow_html=True)
-fig_rain = go.Figure()
-fig_rain.add_trace(go.Bar(
-    x=df_hourly["Hora"],
-    y=df_hourly["Prob. lluvia (%)"],
-    marker_color="#6366f1",
-    marker_line_width=0,
-    name="Prob. lluvia",
-))
-fig_rain.update_layout(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#94a3b8", family="Inter"),
-    xaxis=dict(gridcolor="#1e293b"),
-    yaxis=dict(gridcolor="#1e293b", ticksuffix="%", range=[0, 100]),
-    margin=dict(l=0, r=0, t=10, b=0),
-    height=220,
-    showlegend=False,
-)
-st.plotly_chart(fig_rain, use_container_width=True)
+        st.write(f"**{condicion}** — {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        st.divider()
 
+        st.subheader("Condiciones actuales")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Temperatura", f"{temp:.1f} °C")
+        c2.metric("Sensacion termica", f"{feels:.1f} °C")
+        c3.metric("Humedad", f"{humidity} %")
+        c4.metric("Viento", f"{wind_spd:.1f} km/h {wind_dir}")
 
-# Pronóstico 7 días
-st.markdown('<div class="section-title">📅 Pronóstico 7 días</div>', unsafe_allow_html=True)
+        c5, c6 = st.columns(2)
+        c5.metric("Precipitacion", f"{precip:.1f} mm")
+        c6.metric("Presion atmosferica", f"{pressure:.0f} hPa")
 
-dias_raw = daily["time"]
-tmax = daily["temperature_2m_max"]
-tmin = daily["temperature_2m_min"]
-precip_d = daily["precipitation_sum"]
-wcodes_d = daily["weather_code"]
+        st.divider()
+        st.subheader("Temperatura proximas 24 horas")
+        horas   = [h[11:16] for h in hourly["time"][:24]]
+        temps_h = hourly["temperature_2m"][:24]
 
-dias_fmt = []
-for d in dias_raw:
-    dt = datetime.strptime(d, "%Y-%m-%d")
-    dias_fmt.append(dt.strftime("%a %d/%m"))
+        fig_temp = go.Figure()
+        fig_temp.add_trace(go.Scatter(
+            x=horas, y=temps_h,
+            mode="lines+markers",
+            line=dict(color="#0ea5e9", width=2),
+            fill="tozeroy",
+            fillcolor="rgba(14,165,233,0.1)",
+        ))
+        fig_temp.update_layout(
+            height=260,
+            margin=dict(l=0, r=0, t=10, b=0),
+            xaxis=dict(title="Hora"),
+            yaxis=dict(title="°C"),
+        )
+        st.plotly_chart(fig_temp, use_container_width=True)
 
-df_daily = pd.DataFrame({
-    "Día": dias_fmt,
-    "Máx (°C)": tmax,
-    "Mín (°C)": tmin,
-    "Lluvia (mm)": precip_d,
-    "Condición": [WMO_CODES.get(c, ("—", "—"))[0] for c in wcodes_d],
-})
+        st.subheader("Probabilidad de lluvia (proximas 24h)")
+        prob_lluvia = hourly["precipitation_probability"][:24]
 
-# Gráfico barras max/min
-fig_7d = go.Figure()
-fig_7d.add_trace(go.Bar(
-    x=df_daily["Día"], y=df_daily["Máx (°C)"],
-    name="Máx", marker_color="#f97316", marker_line_width=0,
-))
-fig_7d.add_trace(go.Bar(
-    x=df_daily["Día"], y=df_daily["Mín (°C)"],
-    name="Mín", marker_color="#38bdf8", marker_line_width=0,
-))
-fig_7d.update_layout(
-    barmode="group",
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#94a3b8", family="Inter"),
-    xaxis=dict(gridcolor="#1e293b"),
-    yaxis=dict(gridcolor="#1e293b", ticksuffix="°C"),
-    margin=dict(l=0, r=0, t=10, b=0),
-    height=260,
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-)
-st.plotly_chart(fig_7d, use_container_width=True)
+        fig_rain = go.Figure()
+        fig_rain.add_trace(go.Bar(x=horas, y=prob_lluvia, marker_color="#6366f1"))
+        fig_rain.update_layout(
+            height=220,
+            margin=dict(l=0, r=0, t=10, b=0),
+            xaxis=dict(title="Hora"),
+            yaxis=dict(title="%", range=[0, 100]),
+        )
+        st.plotly_chart(fig_rain, use_container_width=True)
 
-# Tabla resumen
-st.dataframe(
-    df_daily,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Máx (°C)": st.column_config.NumberColumn(format="%.1f °C"),
-        "Mín (°C)": st.column_config.NumberColumn(format="%.1f °C"),
-        "Lluvia (mm)": st.column_config.NumberColumn(format="%.1f mm"),
-    }
-)
+        st.divider()
+        st.subheader("Pronostico 7 dias")
+        dias_fmt = [datetime.strptime(d, "%Y-%m-%d").strftime("%a %d/%m") for d in daily["time"]]
+
+        fig_7d = go.Figure()
+        fig_7d.add_trace(go.Bar(x=dias_fmt, y=daily["temperature_2m_max"], name="Max", marker_color="#f97316"))
+        fig_7d.add_trace(go.Bar(x=dias_fmt, y=daily["temperature_2m_min"], name="Min", marker_color="#38bdf8"))
+        fig_7d.update_layout(
+            barmode="group",
+            height=260,
+            margin=dict(l=0, r=0, t=10, b=0),
+            yaxis=dict(title="°C"),
+            legend=dict(orientation="h", y=1.1),
+        )
+        st.plotly_chart(fig_7d, use_container_width=True)
+
+        df_daily = pd.DataFrame({
+            "Dia": dias_fmt,
+            "Max (°C)": daily["temperature_2m_max"],
+            "Min (°C)": daily["temperature_2m_min"],
+            "Lluvia (mm)": daily["precipitation_sum"],
+            "Condicion": [WMO_CODES.get(c, "—") for c in daily["weather_code"]],
+        })
+        st.dataframe(df_daily, use_container_width=True, hide_index=True)
+
+    with col_derecha:
+        st.title("Datos de consulta")
+        st.write(f"**Ciudad:** {ciudad}")
+        st.write(f"**Departamento:** Honduras")
+        st.write(f"**Coordenadas:** {lat:.4f}, {lon:.4f}")
+        st.write(f"**Hora consulta:** {datetime.now().strftime('%H:%M:%S')}")
+        st.divider()
+
+        if data:
+            cur = data["current"]
+            st.subheader("Resumen actual")
+            st.write(f"Temperatura: **{cur['temperature_2m']:.1f} °C**")
+            st.write(f"Sensacion: **{cur['apparent_temperature']:.1f} °C**")
+            st.write(f"Humedad: **{cur['relative_humidity_2m']} %**")
+            st.write(f"Viento: **{cur['wind_speed_10m']:.1f} km/h {wind_direction_label(cur['wind_direction_10m'])}**")
+            st.write(f"Precipitacion: **{cur['precipitation']:.1f} mm**")
+            st.write(f"Presion: **{cur['surface_pressure']:.0f} hPa**")
+            st.write(f"Condicion: **{WMO_CODES.get(cur['weather_code'], 'Desconocido')}**")
+            st.divider()
+
+            st.subheader("Esta semana")
+            tmax_list = data["daily"]["temperature_2m_max"]
+            tmin_list = data["daily"]["temperature_2m_min"]
+            st.write(f"Temperatura maxima: **{max(tmax_list):.1f} °C**")
+            st.write(f"Temperatura minima: **{min(tmin_list):.1f} °C**")
+            st.write(f"Lluvia total estimada: **{sum(data['daily']['precipitation_sum']):.1f} mm**")
+            st.divider()
+
+        if st.button("Actualizar datos", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
+elif pagina == "Historial":
+    st.title("Historial de consultas")
+    st.write("Ciudades que has consultado en esta sesion.")
+    st.divider()
+
+    if not st.session_state.historial:
+        st.info("Todavia no has consultado ninguna ciudad.")
+    else:
+        for i, c in enumerate(st.session_state.historial, 1):
+            col_h, col_btn = st.columns([3, 1])
+            col_h.write(f"{i}. {c}")
+            if col_btn.button("Ver", key=f"hist_{i}"):
+                st.session_state.ciudad_activa = c
+                st.session_state.pagina = "Consultar"
+                st.rerun()
+
+        st.divider()
+        if st.button("Limpiar historial"):
+            st.session_state.historial = []
+            st.rerun()
+
+elif pagina == "Acerca":
+    st.title("Acerca de esta aplicacion")
+    st.divider()
+    st.write("Clima HN es una aplicacion web desarrollada con Python y Streamlit que muestra informacion meteorologica en tiempo real para las principales ciudades de Honduras.")
+    st.write("Utiliza la API publica de Open-Meteo, la cual no requiere registro ni clave de acceso.")
+    st.divider()
+    st.subheader("Tecnologias utilizadas")
+    st.write("- Python")
+    st.write("- Streamlit")
+    st.write("- Open-Meteo API")
+    st.write("- Plotly")
+    st.write("- Pandas")
+    st.divider()
+    st.subheader("Fuente de datos")
+    st.write("Open-Meteo — https://open-meteo.com")
+    st.write("Modelos meteorologicos de proveedores nacionales como DWD, NOAA y ECMWF.")
+    st.divider()
+    st.caption("Computacion en la Nube — Universidad Tecnologica de Honduras (UTH)")
